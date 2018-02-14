@@ -147,8 +147,12 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    int sendColor(int r, int g, int b, int brightness) {
+    void getCurrentColor() {}
+
+    void sendColor(int r, int g, int b, int brightness) {
         background.setBackgroundColor(currentColor);
+
+        /*
         OkHttpClient client = new OkHttpClient();
 
         Log.d("RGB", "Sending data to Arduino....");
@@ -159,7 +163,7 @@ public class MainActivity extends AppCompatActivity {
 
         Request req = new Request.Builder()
                 .url(url)
-                .post(RequestBody.create(JSON, createJSON(r,g,b)))
+                .post(RequestBody.create(JSON, createJSON(r,g,b,brightness)))
                 .build();
 
         //tv.setText("Sending data to Arduino...");
@@ -177,15 +181,17 @@ public class MainActivity extends AppCompatActivity {
         });
 
         Toast.makeText(this, "Sent RGB: " + r + " " + g + " " + b + ", but actually didn't. #trolled", Toast.LENGTH_LONG).show();
-        return r + g + b;
+        return;
+        */
     }
 
-    String createJSON(int r, int g, int b) {
-        String red = Integer.toString(r);
-        String green = Integer.toString(g);
-        String blue = Integer.toString(b);
+    String createJSON(int r, int g, int b, int brightness) {
+        String sRed = Integer.toString(r);
+        String sGreen = Integer.toString(g);
+        String sBlue = Integer.toString(b);
+        String sBrightness = Integer.toString(brightness);
 
-        String json = (red + ',' + green + ',' + blue);
+        String json = (sRed + ',' + sGreen + ',' + sBlue + ',' + sBrightness);
         return json;
     }
 }
