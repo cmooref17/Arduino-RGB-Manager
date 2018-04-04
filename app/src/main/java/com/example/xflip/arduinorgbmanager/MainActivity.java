@@ -6,13 +6,16 @@ import android.support.constraint.ConstraintLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.SeekBar;
+import android.widget.Switch;
 import android.widget.Toast;
 
 
 import com.flask.colorpicker.ColorPickerView;
+import com.flask.colorpicker.OnColorChangedListener;
 import com.flask.colorpicker.OnColorSelectedListener;
 import com.flask.colorpicker.builder.ColorPickerClickListener;
 import com.flask.colorpicker.builder.ColorPickerDialogBuilder;
@@ -40,53 +43,75 @@ import android.bluetooth.BluetoothDevice;
 
 public class MainActivity extends AppCompatActivity {
     ConstraintLayout background;
-    boolean autoSet = false;
-    int numInRow = 0;
     public static final MediaType JSON
             = MediaType.parse("application/json; charset=utf-8");
+
     int currentColor = 0;
     int red = 0;
     int green = 0;
     int blue = 0;
     int brightness = 100;
 
+    String url = "http://192.168.1.100/index.html";
+
+    boolean autoSet = true; //Auto set color without pressing apply/confirm
+    boolean canSend = true; //For debugging
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         background = findViewById(R.id.background);
+        //initBrightnessBar();
+        SeekBar seekBar = findViewById(R.id.brightness);
+        seekBar.setVisibility(View.GONE);
+        //openColorWheel(); //Open on launch. Comment out to not open on startup
+    }
 
-        openColorWheel();
+    public void setAutoColorChange(View view) {
+        Switch switchButton = (Switch) findViewById(R.id.switch1);
+        autoSet = switchButton.isChecked();
+        Log.d("autoSelect", "autoSet = " + autoSet);
+        if(autoSet) {
+            //Toast.makeText(getApplicationContext(), "Turned 'Auto Set' on",  Toast.LENGTH_SHORT).show();
+        }
+        else {
+            //Toast.makeText(getApplicationContext(), "Turned 'Auto Set' off", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    public void setCanSendColor(View view) {
+        Switch switchButton = (Switch) view;
+        canSend = switchButton.isChecked();
+        Log.d("canSendColor", "canSendColor = " + canSend);
+        if(canSend)
+            Toast.makeText(this, "Enabled sending color to server", Toast.LENGTH_SHORT).show();
+        else
+            Toast.makeText(this, "Disabled sending color to server", Toast.LENGTH_SHORT).show();
     }
 
     void initBrightnessBar() {
         SeekBar brightnessSlider = (SeekBar) findViewById(R.id.brightness);
-
         brightnessSlider.setMax(100);
-
+        brightnessSlider.setProgress(100);
         brightnessSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
                 brightness = i;
-                if(autoSet) {
-                    sendColor(red, green, blue, brightness);
-                    background.setBackgroundColor(currentColor);
-                }
-                else {
-
-                }
+                sendColor(red, green, blue, brightness);
+                background.setBackgroundColor(currentColor);
             }
 
             @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-
-            }
+            public void onStartTrackingTouch(SeekBar seekBar) {}
 
             @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-
-            }
+            public void onStopTrackingTouch(SeekBar seekBar) {}
         });
+    }
+
+    public void openWheel(View view) {
+        openColorWheel();
     }
 
     void openColorWheel() {
@@ -95,15 +120,11 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle("Choose RGB color")
                 .initialColor(Color.WHITE)
                 .wheelType(ColorPickerView.WHEEL_TYPE.FLOWER)
-                .lightnessSliderOnly()
+                //.lightnessSliderOnly() //No alpha bar. I use a separate brightness bar
                 .density(12)
-                .setOnColorSelectedListener(new OnColorSelectedListener() {
+                .setOnColorChangedListener(new OnColorChangedListener() {
                     @Override
-                    public void onColorSelected(int selectedColor) {
-                        if(selectedColor == -8388353)
-                            numInRow++;
-                        else
-                            numInRow = 0;
+                    public void onColorChanged(int selectedColor) {
 
                         currentColor = selectedColor;
                         red = (selectedColor >> 16) & 0xFF;
@@ -111,14 +132,6 @@ public class MainActivity extends AppCompatActivity {
                         blue = (selectedColor >>  0) & 0xFF;
 
                         Log.d("RGB", "R [" + red + "] - G [" + green + "] - B [" + blue + "] - Brightness [" + brightness + "]");
-
-                        if(numInRow % 5 == 0 && numInRow != 0) {
-                            autoSet = !autoSet;
-                            if(autoSet)
-                                Toast.makeText(getApplicationContext(), "Turned 'Auto Set' on", Toast.LENGTH_SHORT).show();
-                            else
-                                Toast.makeText(getApplicationContext(), "Turned 'Auto Set' off", Toast.LENGTH_SHORT).show();
-                        }
 
                         if(autoSet) {
                             sendColor(red, green, blue, brightness);
@@ -135,7 +148,9 @@ public class MainActivity extends AppCompatActivity {
                         green = (selectedColor >>  8) & 0xFF;
                         blue = (selectedColor >>  0) & 0xFF;
                         Log.d("RGB", "R [" + red + "] - G [" + green + "] - B [" + blue + "] - Brightness [" + brightness + "]");
-                        sendColor(red, green, blue, brightness);
+
+                        if(!autoSet) //Don't send the value twice
+                            sendColor(red, green, blue, brightness);
                     }
                 })
                 .setNegativeButton("cancel", new DialogInterface.OnClickListener() {
@@ -150,28 +165,40 @@ public class MainActivity extends AppCompatActivity {
     void getCurrentColor() {}
 
     void sendColor(int r, int g, int b, int brightness) {
+        Log.d("sendColor", "Sending data to Arduino....");
         background.setBackgroundColor(currentColor);
 
-        /*
+        if(!canSend)
+            return;
+
         OkHttpClient client = new OkHttpClient();
 
-        Log.d("RGB", "Sending data to Arduino....");
+        //Log rgb/brightness values
+        Log.d("sendColor","Current color: " + currentColor);
+        Log.d("sendColor","red: " + r + ", green: " + g + ", blue: " + b + ", brightness: " + brightness);
 
-        String url = "192.168.1.100";
+        //Log URL
+        Log.d("sendColor","Url = " + url);
 
-        url = url + "/index.html";
+        String json = createJSON(r, g, b, brightness);
 
+        //Log JSON
+        Log.d("sendColor","JSON = " + json);
+
+        //Build request
         Request req = new Request.Builder()
                 .url(url)
-                .post(RequestBody.create(JSON, createJSON(r,g,b,brightness)))
+                .post(RequestBody.create(JSON, json))
                 .build();
 
-        //tv.setText("Sending data to Arduino...");
+        Log.d("sendColor", "Sending data to Arduino...");
+
+        //Call client
         client.newCall(req).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
                 // Handle call failure
-                Toast.makeText(MainActivity.this, "Call failed", Toast.LENGTH_SHORT).show();
+                //Toast.makeText(MainActivity.this, "Call failed", Toast.LENGTH_SHORT).show();
             }
             @Override
             public void onResponse(Call call, Response response) throws IOException {
@@ -180,15 +207,14 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        Toast.makeText(this, "Sent RGB: " + r + " " + g + " " + b + ", but actually didn't. #trolled", Toast.LENGTH_LONG).show();
-        return;
-        */
+        Log.d("sendColor", "If seeing this log, sending color was a success. I think");
+        Toast.makeText(this, "Sending color sucessful!", Toast.LENGTH_SHORT).show();
     }
 
     String createJSON(int r, int g, int b, int brightness) {
-        String sRed = Integer.toString(r);
-        String sGreen = Integer.toString(g);
-        String sBlue = Integer.toString(b);
+        String sRed        = Integer.toString(r);
+        String sGreen      = Integer.toString(g);
+        String sBlue       = Integer.toString(b);
         String sBrightness = Integer.toString(brightness);
 
         String json = (sRed + ',' + sGreen + ',' + sBlue + ',' + sBrightness);
