@@ -1,6 +1,7 @@
 package com.example.xflip.arduinorgbmanager;
 
 import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.support.constraint.ConstraintLayout;
 import android.support.v7.app.AppCompatActivity;
@@ -8,6 +9,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.SeekBar;
 import android.widget.Switch;
@@ -52,62 +54,65 @@ public class MainActivity extends AppCompatActivity {
     int blue = 0;
     int brightness = 100;
 
-    String url = "http://192.168.1.100/index.html";
+    String url = ""; // = "192.168.1.100/index.html";
 
-    boolean autoSet = true; //Auto set color without pressing apply/confirm
-    boolean canSend = true; //For debugging
+    boolean autoSet; //Auto set color without pressing apply/confirm
+    boolean canSend; //For debugging
+
+    String[] modes = {"Solid","Flash","Pulse","Heartbeat"};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         background = findViewById(R.id.background);
-        //initBrightnessBar();
-        SeekBar seekBar = findViewById(R.id.brightness);
-        seekBar.setVisibility(View.GONE);
-        //openColorWheel(); //Open on launch. Comment out to not open on startup
+        loadPrefs();
+        initUrlBox();
+    }
+
+    void loadPrefs() {
+        SharedPreferences preferences = getPreferences(MODE_PRIVATE);
+        autoSet = preferences.getBoolean("autoSet", false);
+        canSend = preferences.getBoolean("canSend", true);
+        url = preferences.getString("url", "");
+
+        //Set switch states, not just the booleans
+        Switch autoSwitch = findViewById(R.id.switch1);
+        autoSwitch.setChecked(autoSet);
+        Switch canSendSwitch = findViewById(R.id.switch2);
+        canSendSwitch.setChecked(canSend);
+    }
+
+    void initUrlBox() {
+        EditText urlBox = (EditText) findViewById(R.id.editText);
+        urlBox.setText(url);
+    }
+
+    void saveUrlToPreferences() {
+        SharedPreferences preferences = getPreferences(MODE_PRIVATE);
+        SharedPreferences.Editor edit = preferences.edit();
+        edit.putString("url", url);
+        edit.apply();
     }
 
     public void setAutoColorChange(View view) {
         Switch switchButton = (Switch) findViewById(R.id.switch1);
         autoSet = switchButton.isChecked();
         Log.d("autoSelect", "autoSet = " + autoSet);
-        if(autoSet) {
-            //Toast.makeText(getApplicationContext(), "Turned 'Auto Set' on",  Toast.LENGTH_SHORT).show();
-        }
-        else {
-            //Toast.makeText(getApplicationContext(), "Turned 'Auto Set' off", Toast.LENGTH_SHORT).show();
-        }
+        SharedPreferences preferences = getPreferences(MODE_PRIVATE);
+        SharedPreferences.Editor edit = preferences.edit();
+        edit.putBoolean("autoSet", autoSet);
+        edit.apply();
     }
 
     public void setCanSendColor(View view) {
         Switch switchButton = (Switch) view;
         canSend = switchButton.isChecked();
         Log.d("canSendColor", "canSendColor = " + canSend);
-        if(canSend)
-            Toast.makeText(this, "Enabled sending color to server", Toast.LENGTH_SHORT).show();
-        else
-            Toast.makeText(this, "Disabled sending color to server", Toast.LENGTH_SHORT).show();
-    }
-
-    void initBrightnessBar() {
-        SeekBar brightnessSlider = (SeekBar) findViewById(R.id.brightness);
-        brightnessSlider.setMax(100);
-        brightnessSlider.setProgress(100);
-        brightnessSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
-                brightness = i;
-                sendColor(red, green, blue, brightness);
-                background.setBackgroundColor(currentColor);
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {}
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {}
-        });
+        SharedPreferences preferences = getPreferences(MODE_PRIVATE);
+        SharedPreferences.Editor edit = preferences.edit();
+        edit.putBoolean("canSend", canSend);
+        edit.apply();
     }
 
     public void openWheel(View view) {
@@ -120,24 +125,22 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle("Choose RGB color")
                 .initialColor(Color.WHITE)
                 .wheelType(ColorPickerView.WHEEL_TYPE.FLOWER)
-                //.lightnessSliderOnly() //No alpha bar. I use a separate brightness bar
+                //.lightnessSliderOnly()
                 .density(12)
                 .setOnColorChangedListener(new OnColorChangedListener() {
                     @Override
                     public void onColorChanged(int selectedColor) {
 
                         currentColor = selectedColor;
-                        red = (selectedColor >> 16) & 0xFF;
+                        red = (selectedColor >> 16)   & 0xFF;
                         green = (selectedColor >>  8) & 0xFF;
-                        blue = (selectedColor >>  0) & 0xFF;
+                        blue = (selectedColor >>  0)  & 0xFF;
 
                         Log.d("RGB", "R [" + red + "] - G [" + green + "] - B [" + blue + "] - Brightness [" + brightness + "]");
 
                         if(autoSet) {
                             sendColor(red, green, blue, brightness);
                         }
-
-                        //Toast.makeText(getApplicationContext(), "Selected R: " + r + ", G: " + g + ", B: " + b, Toast.LENGTH_SHORT).show();
                     }
                 })
                 .setPositiveButton("Set Color", new ColorPickerClickListener() {
@@ -162,10 +165,11 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    void getCurrentColor() {}
-
     void sendColor(int r, int g, int b, int brightness) {
         Log.d("sendColor", "Sending data to Arduino....");
+        EditText urlBox = (EditText) findViewById(R.id.editText);
+        url = urlBox.getText().toString();
+        Log.d("test", url);
         background.setBackgroundColor(currentColor);
 
         if(!canSend)
@@ -177,8 +181,10 @@ public class MainActivity extends AppCompatActivity {
         Log.d("sendColor","Current color: " + currentColor);
         Log.d("sendColor","red: " + r + ", green: " + g + ", blue: " + b + ", brightness: " + brightness);
 
+        String thisURL = "http://" + url;
+
         //Log URL
-        Log.d("sendColor","Url = " + url);
+        Log.d("sendColor","Url = " + thisURL);
 
         String json = createJSON(r, g, b, brightness);
 
@@ -187,7 +193,7 @@ public class MainActivity extends AppCompatActivity {
 
         //Build request
         Request req = new Request.Builder()
-                .url(url)
+                .url(thisURL)
                 .post(RequestBody.create(JSON, json))
                 .build();
 
@@ -203,21 +209,25 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call call, Response response) throws IOException {
                 // OK Response...inform the user
-                Toast.makeText(MainActivity.this, "Call connected!", Toast.LENGTH_SHORT).show();
+                //Toast.makeText(MainActivity.this, "Call connected!", Toast.LENGTH_SHORT).show();
             }
         });
 
+        saveUrlToPreferences();
         Log.d("sendColor", "If seeing this log, sending color was a success. I think");
-        Toast.makeText(this, "Sending color sucessful!", Toast.LENGTH_SHORT).show();
     }
 
     String createJSON(int r, int g, int b, int brightness) {
         String sRed        = Integer.toString(r);
         String sGreen      = Integer.toString(g);
         String sBlue       = Integer.toString(b);
-        String sBrightness = Integer.toString(brightness);
+        //String sBrightness = Integer.toString(brightness);
+        String sBrightness = "100";
 
-        String json = (sRed + ',' + sGreen + ',' + sBlue + ',' + sBrightness);
+        //String json = (sRed + ',' + sGreen + ',' + sBlue + ',' + sBrightness);
+        //return json;
+        String json = "{\"color\": [" + sRed + "," + sGreen + "," + sBlue + "," + sBrightness + "]}";
+        Log.d("createJSON", "Created JSON: " + json);
         return json;
     }
 }
